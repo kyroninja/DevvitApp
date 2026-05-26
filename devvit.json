@@ -5,6 +5,7 @@
     "dir": "dist/server",
     "entry": "index.cjs"
   },
+  
   "menu": {
     "items": [
       {
@@ -14,6 +15,8 @@
         "forUserType": "moderator",
         "endpoint": "/internal/menu/mop-comment"
       },
+      
+
       {
         "label": "Mop post comments",
         "description": "Remove all comments of this post. This might take a few seconds to run.",
@@ -27,15 +30,23 @@
     "mopComment": "/internal/form/mop-comment-submit",
     "mopPost": "/internal/form/mop-post-submit"
   },
+  
   "triggers": {
-    "onAppInstall": "/internal/triggers/on-app-install"
+    "onAppInstall": "/internal/triggers/on-app-install",
+    "onPostCreate": "/internal/triggers/on-post-create",
+    "onPostUpdate": "/internal/triggers/on-post-update",
+    "onCommentCreate": "/internal/triggers/on-comment-create",
+    "onCommentUpdate": "/internal/triggers/on-comment-update"
   },
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch"
   },
   "permissions": {
-    "reddit": true
+    "reddit": true,
+    "http": {
+     "enable": true,
+     "domains": ["reddit.kyro.ninja"]}
   },
   "dev": {
     "subreddit": "bigbirdiesings_dev"

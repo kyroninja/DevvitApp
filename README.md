@@ -1,94 +1,107 @@
-# Devvit Mod Tool Template
+# 🛡️ Mod Intel (bigbirdiesings)
 
-A template for building Reddit moderation tools using Devvit web. This template provides a complete foundation for creating custom moderation tools with bulk comment management capabilities.
+A real-time AI moderation and community intelligence tool for Reddit moderators built on Reddit Devvit.
 
-## Features
+---
 
-This template includes a working mod tool called **"Mop"** that demonstrates:
+## 🌿 Overview
 
-- **Bulk Comment Management**: Remove or lock multiple comments at once
-- **Thread-level Actions**: "Mop comments" - Remove/lock a comment and all its replies
-- **Post-level Actions**: "Mop post comments" - Remove/lock all comments on a post
-- **Flexible Options**:
-  - Remove comments, lock comments, or both
-  - Skip distinguished comments (moderator/admin posts)
-- **Permission Checks**: Only moderators with proper permissions can use the tool
-- **User-friendly Forms**: Interactive forms with clear options and validation
+Mod Intel is a real-time moderation assistant that helps subreddit moderators manage high-volume communities without drowning in comment chaos.
 
-## Tech Stack
+The moment a post or comment is created, Mod Intel analyzes it, assigns a **toxicity + sentiment risk score (0–100)**, and takes immediate action:
 
-- [Devvit](https://developers.reddit.com/): Reddit's platform for building and deploying apps
-- [Vite](https://vite.dev/): Fast build tool for the web components
-- [Hono](https://hono.dev/): Lightweight web framework for backend logic
-- [TypeScript](https://www.typescriptlang.org/): Type-safe development
+* Allow safe content
+* Lock borderline content for review
+* Remove high-risk content automatically
 
-## Getting Started
+Every decision is fully explainable and stored, creating a transparent audit trail of *why* moderation actions were taken.
 
-1. **Clone this template** or use it as a starting point for your mod tool
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-3. **Configure your app** in `devvit.json`:
-   - Update the app name
-   - Set your development subreddit
-4. **Start developing**:
-   ```bash
-   npm run dev
-   ```
-5. **Test your changes** in your development subreddit
+Instead of moderators manually scanning thousands of comments, Mod Intel acts as a **first-pass intelligence layer for community safety and sentiment awareness**.
 
-## Project Structure
+---
 
-```
-src/
-├── index.ts          # Main server setup with Hono routes
-├── core/
-│   └── nuke.ts       # Core moderation logic for bulk operations
-└── routes/
-    ├── api.ts        # Public API endpoints
-    ├── forms.ts      # Form submission handlers
-    ├── menu.ts       # Context menu item handlers
-    └── triggers.ts   # App lifecycle triggers
-```
+## ⚙️ Features
 
-## Customizing Your Mod Tool
+### 🧠 Real-time content analysis
 
-This template is designed to be easily customizable:
+* Processes posts and comments instantly as they are created
+* Uses sentiment + toxicity scoring to evaluate risk
 
-1. **Modify existing actions**: Edit the nuke functionality in `src/core/nuke.ts`
-2. **Add new menu items**: Update `devvit.json` and add handlers in `src/routes/menu.ts`
-3. **Create new forms**: Add form definitions and handlers in `src/routes/forms.ts`
-4. **Add API endpoints**: Extend `src/routes/api.ts` for external integrations
+### 📊 Unified risk scoring engine
 
-## Commands
+* Combines emotional tone detection (VADER-style sentiment signals)
+* Keyword + pattern-based toxicity detection
+* Produces a single **0–100 moderation risk score**
 
-- `npm run dev`: Starts development mode with live reload on your test subreddit
-- `npm run build`: Builds your mod tool for production
-- `npm run deploy`: Uploads a new version of your app to Reddit
-- `npm run launch`: Publishes your app for review and public use
-- `npm run login`: Authenticates your CLI with Reddit
-- `npm run type-check`: Runs TypeScript type checking, linting, and formatting
+### 🚦 Automated moderation actions
 
-## How It Works
+* **0–29:** Allow
+* **30–60:** Lock for moderator review
+* **60+:** Auto-remove
 
-The template demonstrates Reddit mod tool development through the "Mop" feature:
+### 🧾 Explainable moderation logs
 
-1. **Context Menu Integration**: Click on the Mod Shield icon in a comment to see custom mod actions
-2. **Permission Validation**: Automatically checks if the user has moderation permissions
-3. **Interactive Forms**: Presents options through Reddit's native form system
-4. **Reddit API**: Processes multiple comments using Reddit's API
+* Stores every decision with:
 
-## Development Notes
+  * score breakdown
+  * sentiment signal
+  * triggered rules
+  * final action taken
 
-- **Permissions**: The app requires `reddit: true` permission to access Reddit's API
-- **User Types**: Menu items are restricted to `moderator` user type
+### 🧹 Moderator tools (Mop actions)
 
-## Deployment
+* Bulk remove or lock comment threads
+* Skip distinguished moderator content
+* Apply actions at scale in one click
 
-1. Test thoroughly in your development subreddit
-2. Run `npm run deploy` to upload your app
-3. Use `npm run launch` to submit for Reddit's app review process
-4. Once approved, users can install your mod tool from Reddit's app directory
+---
 
-This template provides everything you need to build powerful, user-friendly moderation tools for Reddit communities.
+## 🛠️ Built With
+
+* Reddit Devvit (mod tool framework)
+* Node.js + TypeScript
+* VADER sentiment analysis engine
+* Custom toxicity scoring pipeline
+* Event-driven moderation workflows
+* Persistent moderation audit database
+
+---
+
+## 🎯 Why this matters
+
+Modern Reddit communities are not lightly moderated forums anymore — they are **live, high-speed social systems**.
+
+Moderators face:
+
+* Sudden toxicity spikes during viral posts
+* Coordinated harassment or brigading
+* Emotional burnout from constant exposure
+* No scalable way to review everything
+
+Mod Intel shifts moderation from:
+
+> reactive damage control
+> to
+> proactive community intelligence
+
+It removes the noise so moderators can focus on **judgment, culture, and nuance — not exhaustion**.
+
+---
+
+## 🚀 Getting started
+
+1. Install the app in your subreddit via Devvit
+2. Configure moderation thresholds (optional)
+3. Enable real-time analysis on posts/comments
+4. Use Mop tools for bulk moderation actions
+5. Review logs and sentiment trends in mod tools
+
+---
+
+## 🔮 What’s next
+
+* Cross-subreddit sentiment trend detection
+* Early warning system for coordinated attacks
+* Moderator copilot suggestions (not just enforcement)
+* Community health dashboards over time
+* Improved context-aware toxicity detection (sarcasm, irony, reclaimed language)

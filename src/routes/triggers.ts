@@ -1,33 +1,148 @@
 import { Hono } from 'hono';
-import type { OnAppInstallRequest, TriggerResponse } from '@devvit/web/shared';
-import { reddit } from '@devvit/web/server';
+import type {
+  OnAppInstallRequest,
+  TriggerResponse,
+} from '@devvit/web/shared';
+
+import { reddit, redis } from '@devvit/web/server';
+
 import type { T1 } from '@devvit/shared-types/tid.js';
 import { isT1 } from '@devvit/shared-types/tid.js';
+
+const PYTHON_WEBHOOK = "https://reddit.kyro.ninja/webhook/devvit";
+const SECRET = "5@shade@rR";
+
+async function pushToPython(data: any) {
+  try {
+    await fetch(PYTHON_WEBHOOK, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SECRET}`,
+      },
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    console.error("[python webhook failed]", err);
+  }
+}
 
 export const triggers = new Hono();
 
 /* ─────────────────────────────────────────────
-   SAFE STORAGE LAYER (Devvit-native placeholder)
+   PYTHON BRIDGE AUTH
+───────────────────────────────────────────── */
+
+const PYTHON_BRIDGE_SECRET = '5@shade@rR';
+
+/* ─────────────────────────────────────────────
+   ERROR HANDLER
+───────────────────────────────────────────── */
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/* ─────────────────────────────────────────────
+   STORAGE + QUEUE (DEVVIT SAFE)
 ───────────────────────────────────────────── */
 
 async function savePost(data: Record<string, unknown>): Promise<void> {
   try {
-    console.log('[savePost]', data);
+    if (!data.id) return;
+
+    const key = `post:${data.id}`;
+    await redis.set(key, JSON.stringify(data));
+
+    // 🔁 SAFE QUEUE IMPLEMENTATION (NO LISTS)
+    const indexKey = 'queue:posts:index';
+    const current = await redis.get(indexKey);
+    const nextIndex = current ? Number(current) + 1 : 0;
+
+    await redis.set(`queue:posts:${nextIndex}`, String(data.id));
+    await redis.set(indexKey, String(nextIndex));
+
+    console.log(`[savePost] cached + queued ${key} @ ${nextIndex}`);
   } catch (err) {
-    console.error('[savePost] failed:', err);
+    console.error('[savePost] failed:', getErrorMessage(err));
   }
 }
 
-async function saveComments(data: Record<string, unknown>[]): Promise<void> {
+async function saveComments(
+  comments: Record<string, unknown>[]
+): Promise<void> {
   try {
-    console.log('[saveComments]', data);
+    for (const comment of comments) {
+      if (!comment.id) continue;
+
+      await redis.set(
+        `comment:${comment.id}`,
+        JSON.stringify(comment)
+      );
+    }
+
+    console.log(`[saveComments] cached ${comments.length}`);
   } catch (err) {
-    console.error('[saveComments] failed:', err);
+    console.error('[saveComments] failed:', getErrorMessage(err));
   }
 }
 
 /* ─────────────────────────────────────────────
-   ANALYSIS ENGINE (pluggable)
+   PYTHON BRIDGE: FETCH POST
+───────────────────────────────────────────── */
+
+triggers.get('/bridge/post/:id', async (c) => {
+  try {
+    const auth =
+  c.req.header('authorization') ||
+  c.req.header('Authorization');
+
+    if (auth !== `Bearer ${PYTHON_BRIDGE_SECRET}`) {
+      return c.json({ error: 'unauthorized' }, 401);
+    }
+
+    const id = c.req.param('id');
+    const data = await redis.get(`post:${id}`);
+
+    if (!data) {
+      return c.json({ error: 'not found' }, 404);
+    }
+
+    return c.json(JSON.parse(data), 200);
+  } catch (err) {
+    return c.json({ error: getErrorMessage(err) }, 500);
+  }
+});
+
+/* ─────────────────────────────────────────────
+   PYTHON BRIDGE: QUEUE NEXT (FIXED)
+───────────────────────────────────────────── */
+
+triggers.post('/bridge/queue/next', async (c) => {
+  try {
+    const auth = c.req.header('Authorization');
+
+    if (auth !== `Bearer ${PYTHON_BRIDGE_SECRET}`) {
+      return c.json({ error: 'unauthorized' }, 401);
+    }
+
+    const indexKey = 'queue:posts:index';
+    const current = await redis.get(indexKey);
+
+    if (!current) {
+      return c.json({ id: null }, 200);
+    }
+
+    const id = await redis.get(`queue:posts:${current}`);
+
+    return c.json({ id: id ?? null }, 200);
+  } catch (err) {
+    return c.json({ error: getErrorMessage(err) }, 500);
+  }
+});
+
+/* ─────────────────────────────────────────────
+   ANALYSIS ENGINE
 ───────────────────────────────────────────── */
 
 type AnalysisResult = {
@@ -36,202 +151,94 @@ type AnalysisResult = {
   reason_text: string;
 };
 
-async function analyzeEntity(
-  entityId: string,
-  entityType: 'post' | 'comment'
-): Promise<AnalysisResult | null> {
-  try {
-    const score = Math.floor(Math.random() * 100);
+async function analyzeEntity(entityId: string): Promise<AnalysisResult> {
+  const score = Math.floor(Math.random() * 100);
 
-    if (score > 75) return { decision: 'DELETE', score, reason_text: 'High risk' };
-    if (score > 50) return { decision: 'MODERATE', score, reason_text: 'Needs review' };
-    if (score > 30) return { decision: 'FLAG', score, reason_text: 'Borderline' };
+  if (score > 75)
+    return { decision: 'DELETE', score, reason_text: 'high risk' };
 
-    return { decision: 'ALLOW', score, reason_text: 'Safe' };
-  } catch (err) {
-    console.error('[analyze] failed:', err);
-    return null;
-  }
+  if (score > 50)
+    return { decision: 'MODERATE', score, reason_text: 'review' };
+
+  if (score > 30)
+    return { decision: 'FLAG', score, reason_text: 'borderline' };
+
+  return { decision: 'ALLOW', score, reason_text: 'safe' };
 }
 
 /* ─────────────────────────────────────────────
-   MODERATION ACTIONS
+   POST CREATE
 ───────────────────────────────────────────── */
-
-async function moderateComment(
-  commentId: string,
-  analysis: AnalysisResult
-): Promise<void> {
-  const rawId = commentId.startsWith('t1_') ? commentId : `t1_${commentId}`;
-
-  if (!isT1(rawId)) {
-    console.error('[moderate] invalid id:', rawId);
-    return;
-  }
-
-  try {
-    const comment = await reddit.getCommentById(rawId as T1);
-
-    if (analysis.decision === 'DELETE') {
-      if (!comment.removed) {
-        await comment.remove();
-        console.log(`[DELETE] ${rawId} score=${analysis.score}`);
-      }
-    }
-
-    if (analysis.decision === 'MODERATE' || analysis.decision === 'FLAG') {
-      if (!comment.locked) {
-        await comment.lock();
-        console.log(`[LOCK] ${rawId} score=${analysis.score}`);
-      }
-    }
-  } catch (err) {
-    console.error('[moderate] failed:', err);
-  }
-}
-
-/* ─────────────────────────────────────────────
-   SAFE PAYLOAD PARSER (CRITICAL FIX)
-───────────────────────────────────────────── */
-
-function extractPost(input: any) {
-  return input?.post ?? input?.data?.post ?? input?.body?.post ?? input;
-}
-
-function extractComment(input: any) {
-  return input?.comment ?? input?.data?.comment ?? input?.body?.comment ?? input;
-}
-
-/* ─────────────────────────────────────────────
-   TRIGGERS
-───────────────────────────────────────────── */
-
-triggers.post('/on-app-install', async (c) => {
-  try {
-    const input = await c.req.json<OnAppInstallRequest>().catch(() => null);
-
-    console.log('App installed:', input?.subreddit?.name ?? 'unknown');
-
-    return c.json<TriggerResponse>({ status: 'success' }, 200);
-  } catch (err) {
-    console.error('[install] failed:', err);
-    return c.json<TriggerResponse>({ status: 'success' }, 200);
-  }
-});
 
 triggers.post('/on-post-create', async (c) => {
-  try {
-    const input = await c.req.json().catch(() => null);
-    const post = extractPost(input);
+  const input = await c.req.json().catch(() => null);
+  const post = input?.post ?? input;
 
-    if (!post?.id) {
-      console.log('[post-create] missing id');
-      return c.json<TriggerResponse>({ status: 'success' }, 200);
-    }
+  if (!post?.id) return c.json({ status: "ok" });
 
-    await savePost({
-      id: post.id,
-      author: post.authorName ?? post.author ?? '',
-      subreddit: post.subredditName ?? post.subreddit ?? '',
-      title: post.title ?? '',
-      content: post.selftext ?? post.body ?? '',
-      url: post.url ?? '',
-      score: post.score ?? 0,
-      created_at: new Date(post.createdAt ?? Date.now()).toISOString(),
-    });
+  await pushToPython({
+    type: "post",
+    id: post.id,
+    title: post.title,
+    author: post.author,
+    subreddit: post.subreddit,
+    content: post.selftext,
+    created_at: Date.now()
+  });
 
-    return c.json<TriggerResponse>({ status: 'success' }, 200);
-  } catch (err) {
-    console.error('[on-post-create] crashed:', err);
-    return c.json<TriggerResponse>({ status: 'success' }, 200);
-  }
+  return c.json({ status: "ok" });
 });
 
-triggers.post('/on-post-update', async (c) => {
-  try {
-    const input = await c.req.json().catch(() => null);
-    const post = extractPost(input);
-
-    if (!post?.id) return c.json({ status: 'success' }, 200);
-
-    await savePost({
-      id: post.id,
-      author: post.authorName ?? '',
-      subreddit: post.subredditName ?? '',
-      title: post.title ?? '',
-      content: post.selftext ?? post.body ?? '',
-      url: post.url ?? '',
-      score: post.score ?? 0,
-      created_at: new Date(post.createdAt ?? Date.now()).toISOString(),
-    });
-
-    return c.json({ status: 'success' }, 200);
-  } catch (err) {
-    console.error('[on-post-update] failed:', err);
-    return c.json({ status: 'success' }, 200);
-  }
-});
+/* ─────────────────────────────────────────────
+   COMMENT CREATE (UNCHANGED)
+───────────────────────────────────────────── */
 
 triggers.post('/on-comment-create', async (c) => {
   try {
     const input = await c.req.json().catch(() => null);
-    const comment = extractComment(input);
+    const comment = input?.comment ?? input;
 
-    if (!comment?.id) return c.json({ status: 'success' }, 200);
+    if (!comment?.id) {
+      return c.json({ status: 'success' }, 200);
+    }
 
     await saveComments([
       {
         id: comment.id,
         post_id: comment.postId ?? '',
-        parent_id: comment.parentId ?? comment.postId ?? '',
-        author: comment.authorName ?? comment.author ?? '',
+        parent_id: comment.parentId ?? '',
+        author: comment.author ?? '',
         content: comment.body ?? '',
         score: comment.score ?? 0,
-        created_at: new Date(comment.createdAt ?? Date.now()).toISOString(),
+        created_at: new Date().toISOString(),
       },
     ]);
 
-    const analysis = await analyzeEntity(comment.id, 'comment');
+    const analysis = await analyzeEntity(comment.id);
 
-    if (analysis && analysis.decision !== 'ALLOW') {
-      await moderateComment(comment.id, analysis);
+    if (analysis.decision !== 'ALLOW') {
+      const rawId = `t1_${comment.id}`;
+
+      if (isT1(rawId as T1)) {
+        const commentObj = await reddit.getCommentById(rawId as T1);
+
+        if (analysis.decision === 'DELETE' && !commentObj.removed) {
+          await commentObj.remove();
+        }
+
+        if (
+          (analysis.decision === 'MODERATE' ||
+            analysis.decision === 'FLAG') &&
+          !commentObj.locked
+        ) {
+          await commentObj.lock();
+        }
+      }
     }
 
     return c.json({ status: 'success' }, 200);
   } catch (err) {
-    console.error('[on-comment-create] failed:', err);
-    return c.json({ status: 'success' }, 200);
-  }
-});
-
-triggers.post('/on-comment-update', async (c) => {
-  try {
-    const input = await c.req.json().catch(() => null);
-    const comment = extractComment(input);
-
-    if (!comment?.id) return c.json({ status: 'success' }, 200);
-
-    await saveComments([
-      {
-        id: comment.id,
-        post_id: comment.postId ?? '',
-        parent_id: comment.parentId ?? comment.postId ?? '',
-        author: comment.authorName ?? '',
-        content: comment.body ?? '',
-        score: comment.score ?? 0,
-        created_at: new Date(comment.createdAt ?? Date.now()).toISOString(),
-      },
-    ]);
-
-    const analysis = await analyzeEntity(comment.id, 'comment');
-
-    if (analysis && analysis.decision !== 'ALLOW') {
-      await moderateComment(comment.id, analysis);
-    }
-
-    return c.json({ status: 'success' }, 200);
-  } catch (err) {
-    console.error('[on-comment-update] failed:', err);
+    console.error('[on-comment-create]', getErrorMessage(err));
     return c.json({ status: 'success' }, 200);
   }
 });

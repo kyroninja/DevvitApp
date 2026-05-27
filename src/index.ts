@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
+
 import { createServer, getServerPort } from '@devvit/web/server';
 
 import { api } from './routes/api';
@@ -8,15 +10,14 @@ import { triggers } from './routes/triggers';
 
 /**
  * ─────────────────────────────────────────────
- * MAIN APP ROUTER
+ * MAIN APP
  * ─────────────────────────────────────────────
  */
 const app = new Hono();
 
 /**
  * ─────────────────────────────────────────────
- * INTERNAL DEVVIT ROUTES
- * (triggered by Reddit events + mod UI actions)
+ * INTERNAL ROUTES
  * ─────────────────────────────────────────────
  */
 const internal = new Hono();
@@ -27,26 +28,37 @@ internal.route('/triggers', triggers);
 
 /**
  * ─────────────────────────────────────────────
- * PUBLIC API ROUTES
- * (optional external/debug endpoints)
+ * PUBLIC ROUTES
  * ─────────────────────────────────────────────
  */
 app.route('/api', api);
 
 /**
  * ─────────────────────────────────────────────
- * MOUNT INTERNAL SYSTEM
+ * MOUNT INTERNAL ROUTES
  * ─────────────────────────────────────────────
  */
 app.route('/internal', internal);
 
 /**
  * ─────────────────────────────────────────────
- * DEVVIT HTTP SERVER BOOTSTRAP
- * IMPORTANT: Devvit runs this as a handler, not a Node server
+ * HEALTHCHECK
+ * (helps diagnose Devvit routing failures)
  * ─────────────────────────────────────────────
  */
-export default createServer({
+app.get('/', (c) => {
+  return c.text('BrandPulse server running');
+});
+
+/**
+ * ─────────────────────────────────────────────
+ * DEVVIT SERVER BOOTSTRAP
+ * IMPORTANT:
+ * Use serve() + createServer together
+ * ─────────────────────────────────────────────
+ */
+serve({
   fetch: app.fetch,
+  createServer,
   port: getServerPort(),
 });

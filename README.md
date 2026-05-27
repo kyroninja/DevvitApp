@@ -91,6 +91,7 @@ It removes the noise so moderators can focus on **judgment, culture, and nuance 
 ## 🚀 Getting started
 
 a. After cloning the repository, switch to the python-api folder and install the requirements.txt then you can run python app.py
+b. this enables the api-server which does the heavy lifting
 
 1. Install the app in your subreddit via Devvit
 2. Configure moderation thresholds (optional)

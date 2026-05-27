@@ -1,4 +1,4 @@
-# 🛡️ Mod Intel (bigbirdiesings)
+# 🛡️ BrandPulse (bigbirdiesings)
 
 A real-time AI moderation and community intelligence tool for Reddit moderators built on Reddit Devvit.
 
